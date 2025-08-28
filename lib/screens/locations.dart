@@ -12,6 +12,8 @@ import '../utils/icon_map.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../utils/condition_label_map.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:animations/animations.dart';
+import '../widgets/dialog.dart';
 
 class LocationsScreen extends StatefulWidget {
   const LocationsScreen({super.key});
@@ -30,8 +32,8 @@ class _LocationsScreenState extends State<LocationsScreen> {
   @override
   void initState() {
     super.initState();
-    loadSavedLocations();
 
+    loadSavedLocations();
   }
 
   Future<void> loadSavedLocations() async {
@@ -99,24 +101,25 @@ class _LocationsScreenState extends State<LocationsScreen> {
     return current;
   }
 
-Future<String?> getWeatherLastUpdatedFromCache(cacheKey) async {
-  final box = await Hive.openBox('weatherMasterCache');
-  final rawJson = box.get(cacheKey);
+  Future<String?> getWeatherLastUpdatedFromCache(cacheKey) async {
+    final box = await Hive.openBox('weatherMasterCache');
+    final rawJson = box.get(cacheKey);
 
-  if (rawJson != null) {
-    final map = json.decode(rawJson);
-    return map['last_updated'];
+    if (rawJson != null) {
+      final map = json.decode(rawJson);
+      return map['last_updated'];
+    }
+
+    return null;
   }
 
-  return null;
-}
   bool? isOnlyHomeLocation = false;
   bool isEditing = false;
-  
+
   @override
   Widget build(BuildContext context) {
-    return 
-     ScaffoldMessenger(
+    final colorTheme = Theme.of(context).colorScheme;
+    return ScaffoldMessenger(
         key: _scaffoldMessengerKey,
         child: Scaffold(
           appBar: AppBar(
@@ -125,331 +128,367 @@ Future<String?> getWeatherLastUpdatedFromCache(cacheKey) async {
             scrolledUnderElevation: 1,
             automaticallyImplyLeading: false,
             actions: [
-            IconButton(
-              icon: Icon(isEditing ? Icons.check : Icons.edit),
-              onPressed: () {
-                _isFirstBuild = false;
-                setState(() {
-                  isEditing = !isEditing;
-                });
-              },
-            ),
-            SizedBox(width: 5,)
-          ],
+              IconButton(
+                icon: Icon(isEditing ? Icons.check : Icons.edit),
+                onPressed: () {
+                  _isFirstBuild = false;
+                  setState(() {
+                    isEditing = !isEditing;
+                  });
+                },
+              ),
+              SizedBox(
+                width: 5,
+              )
+            ],
           ),
-        body: AnimatedSwitcher(
-          duration: _isFirstBuild ? Duration.zero : Duration(milliseconds: 300),
-          switchInCurve: Curves.easeIn,
-          switchOutCurve: Curves.easeOut,
-        transitionBuilder: (Widget child, Animation<double> animation) {
-          return SlideTransition(
-            position: Tween<Offset>(
-              begin: Offset(0.0, 0.1),
-              end: Offset.zero,
-            ).animate(animation),
-            child: FadeTransition(
-              opacity: animation,
-              child: child,
-            ),
-          );
-        },
-
-
-        child: isEditing
-            ? buildReorderableListView(key: ValueKey('reorderable'))
-            : buildDismissibleListView(key: ValueKey('dismissible')),
-      ),
-
-
-        floatingActionButton: FloatingActionButton.large(           
-            onPressed: () async {
-
-                PreferencesHelper.remove("selectedViewLocation");
-
-              final updated = await Navigator.of(context).push<bool>(
-                MaterialPageRoute(
-                    builder: (_) => const SearchLocationsScreen()),
+          body: AnimatedSwitcher(
+            duration:
+                _isFirstBuild ? Duration.zero : Duration(milliseconds: 300),
+            switchInCurve: Curves.easeIn,
+            switchOutCurve: Curves.easeOut,
+            transitionBuilder: (Widget child, Animation<double> animation) {
+              return SlideTransition(
+                position: Tween<Offset>(
+                  begin: Offset(0.0, 0.1),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: FadeTransition(
+                  opacity: animation,
+                  child: child,
+                ),
               );
-
-              if (updated == true) {
-                await loadSavedLocations(); 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('location_saved'.tr())),
-                );
-              } else if(updated == false && PreferencesHelper.getString("selectedViewLocation") != null){
-                Navigator.pop(context, {'viewLocaton': true}
-                );
-              } 
             },
-            shape: const CircleBorder(),
-            child: Icon(PreferencesHelper.getString("homeLocation") != null ? Icons.search : Icons.add),
+            child: isEditing
+                ? buildReorderableListView(key: ValueKey('reorderable'))
+                : buildDismissibleListView(key: ValueKey('dismissible')),
           ),
           floatingActionButtonLocation:
               FloatingActionButtonLocation.centerFloat,
-        
-)
+          floatingActionButton: OpenContainer<bool>(
+            transitionType: ContainerTransitionType.fadeThrough,
+            openBuilder: (context, _) {
+              return SearchLocationsScreen();
+            },
+            closedElevation: 1,
+            openElevation: 0,
+            transitionDuration: Duration(milliseconds: 500),
+            openShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
+            ),
+            closedShape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(50),
+            ),
+            closedColor: colorTheme.primaryContainer,
+            openColor: colorTheme.surfaceContainerHigh,
+            closedBuilder: (context, openContainer) {
+              return FloatingActionButton.large(
+                backgroundColor: Colors.transparent,
+                onPressed: () {
+                  PreferencesHelper.remove("selectedViewLocation");
+                  openContainer();
+                },
+                elevation: 0,
+                highlightElevation: 0,
+                shape: const CircleBorder(),
+                child: Icon(PreferencesHelper.getString("homeLocation") != null
+                    ? Icons.search
+                    : Icons.add),
+              );
+            },
+            onClosed: (updated) async {
+              if (updated == true) {
+                await loadSavedLocations();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('location_saved'.tr())),
+                );
+              } else if (updated == false &&
+                  PreferencesHelper.getString("selectedViewLocation") != null) {
+                Navigator.pop(context, {'viewLocaton': true});
+              }
+            },
+          ),
+        ));
+  }
 
+  Widget buildDismissibleListView({Key? key}) {
+    final colorTheme = Theme.of(context).colorScheme;
+    return savedLocations.isEmpty
+        ? const Center(child: Text("No saved locations."))
+        : ListView.builder(
+            padding: const EdgeInsets.only(bottom: 150),
+            key: key,
+            itemCount: savedLocations.length + 1,
+            itemBuilder: (context, index) {
+              final onlyhomeLocation =
+                  PreferencesHelper.getJson('homeLocation');
 
-    );
+              bool isOnlyHomeLocation = false;
 
-    
-}
-Widget buildDismissibleListView({Key? key}) {
-          return savedLocations.isEmpty
-              ? const Center(child: Text("No saved locations."))
-              : ListView.builder(
-                key: key,
-                  itemCount: savedLocations.length + 1,
-                  itemBuilder: (context, index) {
-                  
-                final onlyhomeLocation = PreferencesHelper.getJson('homeLocation');
-
-                bool isOnlyHomeLocation = false;
-
-                if (onlyhomeLocation != null &&
-                    savedLocations.length == 1) {
-                  final location = savedLocations[0];
-                  if (location.city == onlyhomeLocation['city'] &&
-                      location.country == onlyhomeLocation['country']) {
-                    isOnlyHomeLocation = true;
-                  }
+              if (onlyhomeLocation != null && savedLocations.length == 1) {
+                final location = savedLocations[0];
+                if (location.city == onlyhomeLocation['city'] &&
+                    location.country == onlyhomeLocation['country']) {
+                  isOnlyHomeLocation = true;
                 }
+              }
 
+              if (index == 0) {
+                final weatherFutureCurrentLocation = getWeatherFromCache(
+                    PreferencesHelper.getJson('homeLocation')?['cacheKey']);
 
-              
-
-                    if (index == 0) {
-                      final weatherFutureCurrentLocation = getWeatherFromCache(
-                          PreferencesHelper.getJson(
-                              'homeLocation')?['cacheKey']);
-
-                
-                      return Column(
-                        key: const ValueKey("list-title"),
-                        children: [
-                          Padding(
-                              padding: EdgeInsets.only(left: 14, bottom: 10, top: 16),
-                              
-                              child: Row(
-                                spacing: 5,
-                                children: [
-                                  Icon(
-                                    Symbols.home_pin,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                  Text(
-                                    "default_location".tr(),
-                                    style: TextStyle(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 16),
-                                  )
-                                ],
-                              )),
-                          Container(
-                            padding: EdgeInsets.only(left: 14, right: 14),
-                            margin: EdgeInsets.only(bottom: 8),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(50),
-                              child: Material(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerLow,
-                                child: InkWell(
-                                  onTap: () async {
-                                    final cacheKey = PreferencesHelper.getJson(
-                                        'homeLocation')?['cacheKey'];
-                                    final prefs =
-                                        await SharedPreferences.getInstance();
-
-                                    final box = await Hive.openBox(
-                                        'weatherMasterCache');
-                                    final rawJson = box.get(cacheKey);
-                                    String? lastUpdated;
-
-                                    if (rawJson != null) {
-                                      final map = json.decode(rawJson);
-                                      lastUpdated = map['last_updated'];
-                                    }
-
-                                    final locationData = {
-                                      'city': PreferencesHelper.getJson(
-                                          'homeLocation')?['city'],
-                                      'country': PreferencesHelper.getJson(
-                                          'homeLocation')?['country'],
-                                      'cacheKey': PreferencesHelper.getJson(
-                                          'homeLocation')?['cacheKey'],
-                                      'latitude': PreferencesHelper.getJson(
-                                          'homeLocation')?['lat'],
-                                      'longitude': PreferencesHelper.getJson(
-                                          'homeLocation')?['lon'],
-                                    };
-                                    await prefs.setString('currentLocation',
-                                        jsonEncode(locationData));
-
-                                    Navigator.pop(context, {
-                                      'cacheKey': cacheKey,
-                                      'city': PreferencesHelper.getJson(
-                                          'homeLocation')?['city'],
-                                      'country': PreferencesHelper.getJson(
-                                          'homeLocation')?['country'],
-                                      'last_updated': lastUpdated,
-                                      'latitude': PreferencesHelper.getJson(
-                                          'homeLocation')?['lat'],
-                                      'longitude': PreferencesHelper.getJson(
-                                          'homeLocation')?['lon'],
-                                    });
-     
-                                  },
-
-                                  child: FutureBuilder<Map<String, dynamic>?>(
-                                      future: weatherFutureCurrentLocation,
-                                      builder: (context, snapshot) {
-                                        final isLoading =
-                                            snapshot.connectionState ==
-                                                ConnectionState.waiting;
-                                        final hasData = snapshot.hasData &&
-                                            snapshot.data != null;
-                                        final weatherData = snapshot.data;
-
-                                        Widget leadingWidgetCurrent;
-                                        Widget trailingWidgetCurrent;
-                                        Widget subWidgetCurrent;
-
-                                        if (isLoading) {
-                                          leadingWidgetCurrent =
-                                              const SizedBox.shrink();
-                                          subWidgetCurrent =
-                                              const SizedBox.shrink();
-                                          trailingWidgetCurrent =
-                                              const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2),
-                                          );
-                                        } else if (hasData) {
-                                          final codeCurrent =
-                                              weatherData!['weather_code'];
-                                          final isDayCurrent =
-                                              weatherData['is_day'];
-                                          final tempCCurrent =
-                                              weatherData['temperature_2m'];
-                                          final tempCurrent =
-                                              PreferencesHelper.getString(
-                                                          "selectedTempUnit") ==
-                                                      "Fahrenheit"
-                                                  ? UnitConverter
-                                                      .celsiusToFahrenheit(
-                                                          tempCCurrent)
-                                                  : tempCCurrent;
-
-                                          leadingWidgetCurrent =
-                                              SvgPicture.asset(
-                                            WeatherIconMapper.getIcon(
-                                                codeCurrent.toInt(), isDayCurrent),
-                                            width: 26,
-                                            height: 26,
-                                          );
-
-                                          trailingWidgetCurrent = Text(
-                                            "${tempCurrent.round()}°",
-                                            style: TextStyle(
-                                              fontSize: 32,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface,
-                                            ),
-                                          );
-
-                                          subWidgetCurrent = Text(
-                                            WeatherConditionMapper
-                                                .getConditionLabel(
-                                                    codeCurrent, isDayCurrent).tr(),
-                                          );
-                                        } else {
-                                          leadingWidgetCurrent = Text(
-                                            "N/A",
-                                            style: TextStyle(
-                                              fontSize: 32,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface,
-                                            ),
-                                          );
-
-                                          trailingWidgetCurrent = Text(
-                                            "N/A",
-                                            style: TextStyle(
-                                              fontSize: 32,
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .onSurface,
-                                            ),
-                                          );
-
-                                          subWidgetCurrent = Text(
-                                            "N/A",
-                                          );
-                                        }
-
-                                        return ListTile(
-                                          minTileHeight: 70,
-                                          contentPadding: const EdgeInsets.only(
-                                              left: 10, right: 16),
-                                          splashColor: Colors.transparent,
-                                          leading: CircleAvatar(
-                                            backgroundColor: Theme.of(context)
-                                                .colorScheme
-                                                .surface,
-                                            radius: 25,
-                                            child: leadingWidgetCurrent,
-                                          ),
-                                          title: Text(
-                                            "${PreferencesHelper.getJson('homeLocation')?['city']}, ${PreferencesHelper.getJson('homeLocation')?['country']}",
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                          subtitle: subWidgetCurrent,
-                                          trailing: trailingWidgetCurrent,
-                                          
-                                          
-                                        );
-                                      }),
-                                ),
-                              ),
+                return Column(
+                  key: const ValueKey("list-title"),
+                  children: [
+                    Padding(
+                        padding: EdgeInsets.only(left: 14, bottom: 10, top: 16),
+                        child: Row(
+                          spacing: 5,
+                          children: [
+                            Icon(
+                              Symbols.home_pin,
+                              color: Theme.of(context).colorScheme.primary,
                             ),
+                            Text(
+                              "default_location".tr(),
+                              style: TextStyle(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16),
+                            )
+                          ],
+                        )),
+                    Container(
+                      padding: EdgeInsets.only(left: 14, right: 14),
+                      margin: EdgeInsets.only(bottom: 8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(50),
+                        child: Material(
+                          color:
+                              Theme.of(context).colorScheme.surfaceContainerLow,
+                          child: InkWell(
+                            onTap: () async {
+                              final cacheKey = PreferencesHelper.getJson(
+                                  'homeLocation')?['cacheKey'];
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+
+                              final box =
+                                  await Hive.openBox('weatherMasterCache');
+                              final rawJson = box.get(cacheKey);
+                              String? lastUpdated;
+
+                              if (rawJson != null) {
+                                final map = json.decode(rawJson);
+                                lastUpdated = map['last_updated'];
+                              }
+
+                              final locationData = {
+                                'city': PreferencesHelper.getJson(
+                                    'homeLocation')?['city'],
+                                'country': PreferencesHelper.getJson(
+                                    'homeLocation')?['country'],
+                                'cacheKey': PreferencesHelper.getJson(
+                                    'homeLocation')?['cacheKey'],
+                                'latitude': PreferencesHelper.getJson(
+                                    'homeLocation')?['lat'],
+                                'longitude': PreferencesHelper.getJson(
+                                    'homeLocation')?['lon'],
+                              };
+                              await prefs.setString(
+                                  'currentLocation', jsonEncode(locationData));
+
+                              Navigator.pop(context, {
+                                'cacheKey': cacheKey,
+                                'city': PreferencesHelper.getJson(
+                                    'homeLocation')?['city'],
+                                'country': PreferencesHelper.getJson(
+                                    'homeLocation')?['country'],
+                                'last_updated': lastUpdated,
+                                'latitude': PreferencesHelper.getJson(
+                                    'homeLocation')?['lat'],
+                                'longitude': PreferencesHelper.getJson(
+                                    'homeLocation')?['lon'],
+                              });
+                            },
+                            child: FutureBuilder<Map<String, dynamic>?>(
+                                future: weatherFutureCurrentLocation,
+                                builder: (context, snapshot) {
+                                  final isLoading = snapshot.connectionState ==
+                                      ConnectionState.waiting;
+                                  final hasData =
+                                      snapshot.hasData && snapshot.data != null;
+                                  final weatherData = snapshot.data;
+
+                                  Widget leadingWidgetCurrent;
+                                  Widget trailingWidgetCurrent;
+                                  Widget subWidgetCurrent;
+
+                                  if (isLoading) {
+                                    leadingWidgetCurrent =
+                                        const SizedBox.shrink();
+                                    subWidgetCurrent = const SizedBox.shrink();
+                                    trailingWidgetCurrent = const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    );
+                                  } else if (hasData) {
+                                    final codeCurrent =
+                                        weatherData!['weather_code'];
+                                    final isDayCurrent = weatherData['is_day'];
+                                    final tempCCurrent =
+                                        weatherData['temperature_2m'];
+                                    final tempCurrent =
+                                        PreferencesHelper.getString(
+                                                    "selectedTempUnit") ==
+                                                "Fahrenheit"
+                                            ? UnitConverter.celsiusToFahrenheit(
+                                                tempCCurrent)
+                                            : tempCCurrent;
+
+                                    leadingWidgetCurrent = SvgPicture.asset(
+                                      WeatherIconMapper.getIcon(
+                                          codeCurrent.toInt(), isDayCurrent),
+                                      width: 26,
+                                      height: 26,
+                                    );
+
+                                    trailingWidgetCurrent = Text(
+                                      "${tempCurrent.round()}°",
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                    );
+
+                                    subWidgetCurrent = Text(
+                                      WeatherConditionMapper.getConditionLabel(
+                                              codeCurrent, isDayCurrent)
+                                          .tr(),
+                                      style: TextStyle(),
+                                    );
+                                  } else {
+                                    leadingWidgetCurrent = Text(
+                                      "",
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                    );
+
+                                    trailingWidgetCurrent = Text(
+                                      "",
+                                      style: TextStyle(
+                                        fontSize: 32,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurface,
+                                      ),
+                                    );
+
+                                    subWidgetCurrent = Text(
+                                      "",
+                                    );
+                                  }
+
+                                  return FadeInListItem(
+                                    child: ListTile(
+                                      minTileHeight: 70,
+                                      contentPadding: const EdgeInsets.only(
+                                          left: 10, right: 16),
+                                      splashColor: Colors.transparent,
+                                      leading: CircleAvatar(
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .surface,
+                                        radius: 25,
+                                        child: leadingWidgetCurrent,
+                                      ),
+                                      title: Text(
+                                        "${PreferencesHelper.getJson('homeLocation')?['city']}, ${PreferencesHelper.getJson('homeLocation')?['country']}",
+                                        style: TextStyle(),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      subtitle: subWidgetCurrent,
+                                      trailing: trailingWidgetCurrent,
+                                    ),
+                                  );
+                                }),
                           ),
-                          Padding(
-                              padding: EdgeInsets.only(
-                                  left: 14, bottom: 10, top: 12),
-                              child: Row(
-                                spacing: 5,
-                                children: [
-                                  isOnlyHomeLocation ? Text("") :
-                                  Icon(
-                                    Symbols.star,
-                                    color:
-                                        Theme.of(context).colorScheme.primary,
-                                  ),
-                                  isOnlyHomeLocation ? Text("") :
-                                  Text(
-                                    "saved_locations".tr(),
-                                    style: TextStyle(
+                        ),
+                      ),
+                    ),
+                    Padding(
+                        padding: EdgeInsets.only(
+                            left: 14, bottom: 5, top: 0, right: 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            isOnlyHomeLocation
+                                ? Text("")
+                                : Row(
+                                    spacing: 5,
+                                    children: [
+                                      Icon(
+                                        Symbols.star,
                                         color: Theme.of(context)
                                             .colorScheme
                                             .primary,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 16),
-                                  )
-                                ],
-                              )),
-
-                              isOnlyHomeLocation ? Padding(padding: EdgeInsets.only(top: 40), child: SvgPicture.string(
-                                '''
+                                      ),
+                                      isOnlyHomeLocation
+                                          ? Text("")
+                                          : Text(
+                                              "saved_locations".tr(),
+                                              style: TextStyle(
+                                                  color: Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 16),
+                                            ),
+                                    ],
+                                  ),
+                            IconButton(
+                                onPressed: () {
+                                  showMatDialog(
+                                      context: context,
+                                      title: "Info",
+                                      content: SizedBox(
+                                          height: 70 + 30,
+                                          child: Column(
+                                            children: [
+                                              Text(
+                                                "• Swipe from right to left to delete a location",
+                                                style: TextStyle(fontSize: 15),
+                                              ),
+                                              Divider(
+                                                height: 16,
+                                              ),
+                                              Text(
+                                                  "• Hold a location to set it as default",
+                                                  style:
+                                                      TextStyle(fontSize: 15)),
+                                            ],
+                                          )));
+                                },
+                                icon: Icon(
+                                  Symbols.info,
+                                  weight: 600,
+                                ))
+                          ],
+                        )),
+                    isOnlyHomeLocation
+                        ? Padding(
+                            padding: EdgeInsets.only(top: 40),
+                            child: SvgPicture.string(
+                              '''
                         <?xml version="1.0" encoding="utf-8"?>
                         <svg height="147.0dip" width="186.0dip" viewBox="0 0 186.0 147.0"
                           xmlns:android="http://schemas.android.com/apk/res/android">
@@ -468,338 +507,405 @@ Widget buildDismissibleListView({Key? key}) {
                             <path fill="#f8f9fa" d="M69.28,129.78C68.05,129.78 66.87,130.16 65.93,130.84C64.69,125.55 60.15,121.62 54.79,121.62C49.66,121.62 45.36,125.17 43.83,130.03C42.47,129.04 40.82,128.41 39.05,128.41C35.46,128.41 32.4,130.84 31.22,134.27H75C74.29,131.65 72,129.78 69.28,129.78Z" />
                         </svg>
 
-                        ''', width: 250,
-                              )) : SizedBox.shrink(),
+                        ''',
+                              width: 250,
+                            ))
+                        : SizedBox.shrink(),
+                  ],
+                );
+              }
 
-                        ],
-                      );
-                    }
+              final actualIndex = index - 1;
+              final loc = savedLocations[actualIndex];
 
+              final weatherFuture = getWeatherFromCache(
+                "${loc.city}_${loc.country}".toLowerCase().replaceAll(' ', '_'),
+              );
+
+              final homeLocation = PreferencesHelper.getJson('homeLocation');
+              final isHomeLocation = homeLocation != null &&
+                  homeLocation['city'] == loc.city &&
+                  homeLocation['country'] == loc.country;
+
+              if (isHomeLocation) {
+                return KeyedSubtree(
+                  key: ValueKey(
+                      '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}'),
+                  child: const SizedBox.shrink(),
+                );
+              }
+
+              final isLastItem = index == savedLocations.length;
+
+              Future<Map<String, dynamic>> _getCurrentHomeInfo() async {
+                final prefs = await SharedPreferences.getInstance();
+                final homeLocationJson = prefs.getString('homeLocation');
+                if (homeLocationJson != null) {
+                  final data = jsonDecode(homeLocationJson);
+                  return {
+                    'cacheKey': data['cacheKey'] ?? '',
+                    'isGPS': data['isGPS'] ?? false,
+                    'city': data['city'] ?? '',
+                    'country': data['country'] ?? '',
+                  };
+                }
+                return {'cacheKey': '', 'isGPS': false};
+              }
+
+              Future<void> setHomeLocation(
+                  BuildContext context, SavedLocation loc) async {
+                final prefs = await SharedPreferences.getInstance();
+                final cacheKey = "${loc.city}_${loc.country}"
+                    .toLowerCase()
+                    .replaceAll(' ', '_');
+
+                await prefs.setString(
+                    'homeLocation',
+                    jsonEncode({
+                      'city': loc.city,
+                      'country': loc.country,
+                      'cacheKey': cacheKey,
+                      'lat': loc.latitude,
+                      'lon': loc.longitude,
+                      'isGPS': false,
+                    }));
+              }
+
+              return FadeInListItem(
+                child: Dismissible(
+                  key: ValueKey(
+                      '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}-${index}'),
+                  direction: DismissDirection.endToStart,
+                  confirmDismiss: (direction) async {
                     final actualIndex = index - 1;
-                    final loc = savedLocations[actualIndex];
 
-                    final weatherFuture = getWeatherFromCache(
-                      "${loc.city}_${loc.country}"
-                          .toLowerCase()
-                          .replaceAll(' ', '_'),
-                    );
+                    if (savedLocations[actualIndex].city ==
+                            PreferencesHelper.getJson(
+                                'homeLocation')?['city'] &&
+                        savedLocations[actualIndex].country ==
+                            PreferencesHelper.getJson(
+                                'homeLocation')?['country']) {
+                      _scaffoldMessengerKey.currentState?.hideCurrentSnackBar();
 
-                    final homeLocation =
-                        PreferencesHelper.getJson('homeLocation');
-                    final isHomeLocation = homeLocation != null &&
-                        homeLocation['city'] == loc.city &&
-                        homeLocation['country'] == loc.country;
-
-                    if (isHomeLocation) {
-                      return KeyedSubtree(
-                        key: ValueKey(
-                            '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}'),
-                        child: const SizedBox.shrink(),
-                      );
-                    }
-
-
-                      final isLastItem = index == savedLocations.length;
-
-
-                    return Dismissible(
-                      key: ValueKey(
-                          '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}'),
-                      direction: DismissDirection.endToStart,
-                      confirmDismiss: (direction) async {
-                        final actualIndex = index - 1;
-
-                        if (savedLocations[actualIndex].city ==
-                                PreferencesHelper.getJson(
-                                    'homeLocation')?['city'] &&
-                            savedLocations[actualIndex].country ==
-                                PreferencesHelper.getJson(
-                                    'homeLocation')?['country']) {
-                          _scaffoldMessengerKey.currentState
-                              ?.hideCurrentSnackBar();
-
-                          _scaffoldMessengerKey.currentState?.showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text("You can't delete the default location"),
-                              duration: Duration(seconds: 2),
-                            ),
-                          );
-                          return false;
-                        }
-                        return true;
-                      },
-                      background: Container(
-                        alignment: Alignment.centerRight,
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        margin: EdgeInsets.only(left: 14, right: 14),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(50),
-                          color: Theme.of(context).colorScheme.errorContainer,
+                      _scaffoldMessengerKey.currentState?.showSnackBar(
+                        SnackBar(
+                          content:
+                              Text("You can't delete the default location"),
+                          duration: Duration(seconds: 2),
                         ),
-                        child: Icon(Icons.delete,
-                            color:
-                                Theme.of(context).colorScheme.onErrorContainer),
-                      ),
-                      onDismissed: (direction) async {
+                      );
+                      return false;
+                    }
+                    return true;
+                  },
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    margin: EdgeInsets.only(left: 14, right: 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(50),
+                      color: Theme.of(context).colorScheme.errorContainer,
+                    ),
+                    child: Icon(Icons.delete,
+                        color: Theme.of(context).colorScheme.onErrorContainer),
+                  ),
+                  onDismissed: (direction) async {
                     final actualIndex = index - 1;
                     final removed = savedLocations.removeAt(actualIndex);
 
+                    setState(() {});
 
-                        setState(() {});
+                    final prefs = await SharedPreferences.getInstance();
+                    await prefs.setString(
+                      'saved_locations',
+                      jsonEncode(
+                          savedLocations.map((e) => e.toJson()).toList()),
+                    );
 
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setString(
-                          'saved_locations',
-                          jsonEncode(
-                              savedLocations.map((e) => e.toJson()).toList()),
-                        );
-
-                        final cacheKey = "${removed.city}_${removed.country}"
-                            .toLowerCase()
-                            .replaceAll(' ', '_');
-                        final box = await Hive.openBox('weatherMasterCache');
-                        await box.delete(cacheKey);
-                        _scaffoldMessengerKey.currentState?.showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                'Deleted ${removed.city}, ${removed.country}'),
-
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: EdgeInsets.only(left: 14, right: 14),
-                        margin: EdgeInsets.only(bottom: isLastItem ? 150 : 8),
-                        decoration: BoxDecoration(
-                          color: Colors.transparent
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(50),
-                          child: Material(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerLow,
-                            child: InkWell(
-                              onTap: () async {
-                                final cacheKey = "${loc.city}_${loc.country}"
-                                    .toLowerCase()
-                                    .replaceAll(' ', '_');
-                                final prefs =
-                                    await SharedPreferences.getInstance();
-
-                                final box =
-                                    await Hive.openBox('weatherMasterCache');
-                                final rawJson = box.get(cacheKey);
-                                String? lastUpdated;
-
-                                if (rawJson != null) {
-                                  final map = json.decode(rawJson);
-                                  lastUpdated = map['last_updated'];
-                                }
-
-                                // Save to prefs if needed
-                                final locationData = {
-                                  'city': loc.city,
-                                  'country': loc.country,
-                                  'cacheKey': cacheKey,
-                                  'latitude': loc.latitude,
-                                  'longitude': loc.longitude,
-                                };
-                                await prefs.setString('currentLocation',
-                                    jsonEncode(locationData));
-
-                                // Return data to previous screen
-                                Navigator.pop(context, {
-                                  'cacheKey': cacheKey,
-                                  'city': loc.city,
-                                  'country': loc.country,
-                                  'last_updated': lastUpdated,
-                                  'lat': loc.latitude,
-                                  'lon': loc.longitude,
-                                });
-
-                                
-                              },
-
-                              
-                              child: FutureBuilder<Map<String, dynamic>?>(
-                                future: weatherFuture,
-                                
-                                builder: (context, snapshot) {
-                                  final isLoading = snapshot.connectionState ==
-                                      ConnectionState.waiting;
-                                  final hasData =
-                                      snapshot.hasData && snapshot.data != null;
-                                  final weatherData = snapshot.data;
-
-                                  Widget leadingWidget;
-                                  Widget trailingWidget;
-                                  Widget subWidget;
-                                  if (isLoading) {
-                                    leadingWidget = const SizedBox.shrink();
-                                    subWidget = const SizedBox.shrink();
-                                    trailingWidget = const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    );
-                                  } else if (hasData) {
-                                    final code = weatherData!['weather_code'];
-                                    final isDay = weatherData['is_day'];
-                                    final tempC = weatherData['temperature_2m'];
-
-                                    final temp = PreferencesHelper.getString(
-                                                "selectedTempUnit") ==
-                                            "Fahrenheit"
-                                        ? UnitConverter.celsiusToFahrenheit(
-                                            tempC)
-                                        : tempC;
-
-                                    leadingWidget = SvgPicture.asset(
-                                      WeatherIconMapper.getIcon(code, isDay),
-                                      width: 26,
-                                      height: 26,
-                                    );
-
-                                    trailingWidget = Text(
-                                      "${temp.round()}°",
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ),
-                                    );
-
-                                    subWidget = Text(
-                                      WeatherConditionMapper.getConditionLabel(
-                                          code, isDay).tr(),
-                                    );
-                                  } else {
-                                    leadingWidget = Text(
-                                      "N/A",
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ),
-                                    );
-
-                                    trailingWidget = Text(
-                                      "N/A",
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .onSurface,
-                                      ),
-                                    );
-
-                                    subWidget = Text(
-                                      "N/A",
-                                    );
-                                  }
-
-                                  return ListTile(
-                                    minTileHeight: 70,
-                                    contentPadding: const EdgeInsets.only(
-                                        left: 10, right: 16),
-                                    splashColor: Colors.transparent,
-                                    leading: CircleAvatar(
-                                      backgroundColor:
-                                          Theme.of(context).colorScheme.surface,
-                                      radius: 25,
-                                      child: leadingWidget,
-                                    ),
-                                    title: Text(
-                                      "${loc.city}, ${loc.country}",
-                  
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    
-                                    subtitle: subWidget,
-                                    trailing: trailingWidget,
-                                  );
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
+                    final cacheKey = "${removed.city}_${removed.country}"
+                        .toLowerCase()
+                        .replaceAll(' ', '_');
+                    final box = await Hive.openBox('weatherMasterCache');
+                    await box.delete(cacheKey);
+                    _scaffoldMessengerKey.currentState?.showSnackBar(
+                      SnackBar(
+                        content:
+                            Text('Deleted ${removed.city}, ${removed.country}'),
                       ),
                     );
                   },
-                
+                  child: Container(
+                    padding: EdgeInsets.only(left: 14, right: 14),
+                    margin: EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(color: Colors.transparent),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(50),
+                      child: Material(
+                        color:
+                            Theme.of(context).colorScheme.surfaceContainerLow,
+                        child: InkWell(
+                          onLongPress: () async {
+                            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                            showMatDialog(
+                              context: context,
+                              title: "${loc.city}, ${loc.country}",
+                              confirmText: "Set as default",
+                              cancelText: "cancel".tr(),
+                              onConfirm: () {
+                                if (!context.mounted) return;
+                                setHomeLocation(context, loc);
+
+                                setState(() {});
+                              },
+                            );
+                          },
+                          onTap: () async {
+                            final cacheKey = "${loc.city}_${loc.country}"
+                                .toLowerCase()
+                                .replaceAll(' ', '_');
+                            final prefs = await SharedPreferences.getInstance();
+
+                            final box =
+                                await Hive.openBox('weatherMasterCache');
+                            final rawJson = box.get(cacheKey);
+                            String? lastUpdated;
+
+                            if (rawJson != null) {
+                              final map = json.decode(rawJson);
+                              lastUpdated = map['last_updated'];
+                            }
+
+                            // Save to prefs if needed
+                            final locationData = {
+                              'city': loc.city,
+                              'country': loc.country,
+                              'cacheKey': cacheKey,
+                              'latitude': loc.latitude,
+                              'longitude': loc.longitude,
+                            };
+                            await prefs.setString(
+                                'currentLocation', jsonEncode(locationData));
+
+                            // Return data to previous screen
+                            Navigator.pop(context, {
+                              'cacheKey': cacheKey,
+                              'city': loc.city,
+                              'country': loc.country,
+                              'last_updated': lastUpdated,
+                              'lat': loc.latitude,
+                              'lon': loc.longitude,
+                            });
+                          },
+                          child: FutureBuilder<Map<String, dynamic>?>(
+                            future: weatherFuture,
+                            builder: (context, snapshot) {
+                              final isLoading = snapshot.connectionState ==
+                                  ConnectionState.waiting;
+                              final hasData =
+                                  snapshot.hasData && snapshot.data != null;
+                              final weatherData = snapshot.data;
+
+                              Widget leadingWidget;
+                              Widget trailingWidget;
+                              Widget subWidget;
+                              if (isLoading) {
+                                leadingWidget = const SizedBox.shrink();
+                                subWidget = const SizedBox.shrink();
+                                trailingWidget = const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                );
+                              } else if (hasData) {
+                                final code = weatherData!['weather_code'];
+                                final isDay = weatherData['is_day'];
+                                final tempC = weatherData['temperature_2m'];
+
+                                final temp = PreferencesHelper.getString(
+                                            "selectedTempUnit") ==
+                                        "Fahrenheit"
+                                    ? UnitConverter.celsiusToFahrenheit(tempC)
+                                    : tempC;
+
+                                leadingWidget = SvgPicture.asset(
+                                  WeatherIconMapper.getIcon(code, isDay),
+                                  width: 26,
+                                  height: 26,
+                                );
+
+                                trailingWidget = Text(
+                                  "${temp.round()}°",
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                );
+
+                                subWidget = Text(
+                                  WeatherConditionMapper.getConditionLabel(
+                                          code, isDay)
+                                      .tr(),
+                                  style: TextStyle(),
+                                );
+                              } else {
+                                leadingWidget = Text(
+                                  "",
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                );
+
+                                trailingWidget = Text(
+                                  "",
+                                  style: TextStyle(
+                                    fontSize: 32,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                );
+
+                                subWidget = Text(
+                                  "1",
+                                );
+                              }
+
+                              return ListTile(
+                                minTileHeight: 70,
+                                contentPadding:
+                                    const EdgeInsets.only(left: 10, right: 16),
+                                splashColor: Colors.transparent,
+                                leading: CircleAvatar(
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.surface,
+                                  radius: 25,
+                                  child: leadingWidget,
+                                ),
+                                title: Text(
+                                  "${loc.city}, ${loc.country}",
+                                  style: TextStyle(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: subWidget,
+                                trailing: trailingWidget,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               );
-            
-
-  
-
+            },
+          );
   }
+
   Widget buildReorderableListView({Key? key}) {
-  return ReorderableListView.builder(
-    key: key,
-    itemCount: savedLocations.length,
-    
-    onReorder: (oldIndex, newIndex) async {
-      if (newIndex > oldIndex) newIndex--;
-      final item = savedLocations.removeAt(oldIndex);
-      savedLocations.insert(newIndex, item);
-      setState(() {}); 
+    return ReorderableListView.builder(
+      key: key,
+      itemCount: savedLocations.length,
+      onReorder: (oldIndex, newIndex) async {
+        if (newIndex > oldIndex) newIndex--;
+        final item = savedLocations.removeAt(oldIndex);
+        savedLocations.insert(newIndex, item);
+        setState(() {});
 
         // SAVE NEW ORDER
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        'saved_locations',
-        jsonEncode(savedLocations.map((e) => e.toJson()).toList()),
-      );
-    },
-proxyDecorator: (child, index, animation) {
-  return Material(
-    type: MaterialType.transparency, // No elevation or color
-    child: child,
-  );
-},
-    itemBuilder: (context, index) {
-      final loc = savedLocations[index];
-      final homeLocation =
-      PreferencesHelper.getJson('homeLocation');
-      final isHomeLocation = homeLocation != null &&
-      homeLocation['city'] == loc.city &&
-      homeLocation['country'] == loc.country;
-          if (isHomeLocation) {
-      return KeyedSubtree(
-        key: ValueKey(
-            '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}'),
-        child: const SizedBox.shrink(),
-      );
-    }
-    return Container(
-      key: ValueKey('${loc.city}-${loc.country}'),
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(50), 
-      ),
-      child: ListTile(
-        minTileHeight: 70,
-        contentPadding: EdgeInsets.only(right: 16, left: 16),
-        leading: Icon(Symbols.location_on),
-        tileColor: Colors.transparent,
-        title: Text(loc.city, style: TextStyle(fontSize: 15),),
-        subtitle: Text(loc.country, style: TextStyle(fontSize: 13)),
-        trailing: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.surface,
-          child: Icon(Symbols.drag_handle),
-        ),
-      ),
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          'saved_locations',
+          jsonEncode(savedLocations.map((e) => e.toJson()).toList()),
+        );
+      },
+      proxyDecorator: (child, index, animation) {
+        return Material(
+          type: MaterialType.transparency, // No elevation or color
+          child: child,
+        );
+      },
+      itemBuilder: (context, index) {
+        final loc = savedLocations[index];
+        final homeLocation = PreferencesHelper.getJson('homeLocation');
+        final isHomeLocation = homeLocation != null &&
+            homeLocation['city'] == loc.city &&
+            homeLocation['country'] == loc.country;
+        if (isHomeLocation) {
+          return KeyedSubtree(
+            key: ValueKey(
+                '${loc.city}-${loc.country}-${loc.latitude}-${loc.longitude}'),
+            child: const SizedBox.shrink(),
+          );
+        }
+        return Container(
+          key: ValueKey('${loc.city}-${loc.country}'),
+          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(50),
+          ),
+          child: ListTile(
+            minTileHeight: 70,
+            contentPadding: EdgeInsets.only(right: 16, left: 16),
+            leading: Icon(
+              Symbols.location_on,
+              size: 26,
+            ),
+            tileColor: Colors.transparent,
+            title: Text(
+              loc.city,
+              style: TextStyle(
+                fontSize: 15,
+              ),
+            ),
+            subtitle: Text(loc.country,
+                style: TextStyle(
+                  fontSize: 13,
+                )),
+            trailing: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              child: Icon(Symbols.drag_handle),
+            ),
+          ),
+        );
+      },
     );
-
-    },
-  );
-}
+  }
 }
 
+// animation for list
+
+class FadeInListItem extends StatefulWidget {
+  final Widget child;
+
+  const FadeInListItem({required this.child, super.key});
+
+  @override
+  State<FadeInListItem> createState() => _FadeInListItemState();
+}
+
+class _FadeInListItemState extends State<FadeInListItem> {
+  double opacity = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      setState(() => opacity = 1);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: opacity,
+      duration: const Duration(milliseconds: 700),
+      curve: Curves.easeInOut,
+      child: widget.child,
+    );
+  }
+}

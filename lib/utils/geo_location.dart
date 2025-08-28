@@ -1,66 +1,78 @@
-import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
-Future<Position> getCurrentPosition() async {
-  bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-  if (!serviceEnabled) {
-    throw Exception("Location services are disabled.");
-  }
+class Position {
+  final double latitude;
+  final double longitude;
 
-  LocationPermission permission = await Geolocator.checkPermission();
-  if (permission == LocationPermission.denied) {
-    permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied) {
-      throw Exception("Location permission denied.");
+  Position({
+    required this.latitude,
+    required this.longitude,
+  });
+}
+
+class NativeLocation {
+  static const platform = MethodChannel('native_location');
+
+  // Get current position from native Kotlin
+  static Future<Position> getCurrentPosition() async {
+    try {
+      final result = await platform.invokeMethod('getCurrentPosition');
+
+      final latitude = double.parse(result['latitude'] ?? '0');
+      final longitude = double.parse(result['longitude'] ?? '0');
+
+      print(latitude + longitude);
+
+      return Position(latitude: latitude, longitude: longitude);
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? "Unknown error");
     }
   }
 
-  if (permission == LocationPermission.deniedForever) {
-    throw Exception("Location permission permanently denied.");
+  // Reverse geocode
+  static Future<Map<String, String>> reverseGeocode(
+      double lat, double lon) async {
+    try {
+      final result = await platform.invokeMethod('reverseGeocode', {
+        'latitude': lat,
+        'longitude': lon,
+      });
+      return {
+        'city': result['city'] ?? '',
+        'country': result['country'] ?? '',
+      };
+    } on PlatformException catch (e) {
+      // Return empty strings on failure
+      return {'city': '', 'country': ''};
+    }
   }
+}
 
-  return await Geolocator.getCurrentPosition(
-      desiredAccuracy: LocationAccuracy.high,
-      
+class LocationPermissionHelper {
+  /// Shows SnackBars if either check fails
+  static Future<bool> checkServicesAndPermission(BuildContext context) async {
+    final serviceStatus = await Permission.location.serviceStatus;
+    if (serviceStatus != ServiceStatus.enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enable location services')),
       );
-}
-
-
-
-Future<Map<String, String>> reverseGeocode(double latitude, double longitude) async {
-  try {
-    List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
-
-    if (placemarks.isNotEmpty) {
-      final Placemark place = placemarks.first;
-      String city = place.locality?.isNotEmpty == true
-          ? place.locality!
-          : place.subAdministrativeArea?.isNotEmpty == true
-              ? place.subAdministrativeArea!
-              : place.administrativeArea?.isNotEmpty == true
-                  ? place.administrativeArea!
-                  : place.name?.isNotEmpty == true
-                      ? place.name!
-                      : 'Current';
-
-      String country = place.country ?? '';
-
-      return {
-        'city': city,
-        'country': country,
-      };
-    } else {
-      return {
-        'city': '',
-        'country': '',
-      };
+      return false;
     }
-  } catch (e) {
-    print('Reverse geocoding failed: $e');
-    return {
-      'city': '',
-      'country': '',
-    };
+
+    var status = await Permission.location.status;
+    if (!status.isGranted) {
+      status = await Permission.location.request();
+      if (!status.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission denied')),
+        );
+        return false;
+      }
+    }
+
+    // All good
+    return true;
   }
 }
-

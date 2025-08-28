@@ -1,5 +1,6 @@
 // ignore_for_file: public_member_api_docs private class
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 class OkButton extends StatelessWidget {
@@ -14,12 +15,7 @@ class OkButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton(
       onPressed: onPressed,
-      child: Text(
-        Localizations.of<MaterialLocalizations>(context, MaterialLocalizations)
-                ?.okButtonLabel ??
-            'OK' , style: 
-            const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)
-      ),
+      child: Text('ok'.tr(), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
     );
   }
 }

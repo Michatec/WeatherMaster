@@ -6,6 +6,8 @@ import android.content.Context
 import android.widget.RemoteViews
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Bundle
+import android.util.TypedValue
 import com.pranshulgg.weather_master_app.util.WeatherIconMapper
 
 
@@ -20,6 +22,7 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
             // Prevents crash when isDayWidget was stored as Boolean instead of String
             val rawIsDay = prefs.all["isDayWidget"]
+
             val isDay = when (rawIsDay) {
                 is String -> rawIsDay
                 is Boolean -> if (rawIsDay) "1" else "0"
@@ -53,5 +56,8 @@ class WeatherWidgetProvider : AppWidgetProvider() {
 
             manager.updateAppWidget(id, views)
         }
+
+
     }
+
 }
